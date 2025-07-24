@@ -1,0 +1,42 @@
+name: Build & Push Validator Image (PR)
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build-and-push:
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud (WIF)
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          token_format: 'access_token'
+          workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.SERVICE_ACCOUNT }}
+
+      - name: Set Docker image tag from PR branch
+        run: |
+          CLEAN_TAG=$(echo "${{ github.head_ref }}" | tr / -)
+          echo "TAG=$CLEAN_TAG" >> $GITHUB_ENV
+
+      - name: Build Docker image
+        run: |
+          docker build -t ${{ secrets.GAR_LOCATION }}/${{ secrets.GAR_PROJECT_ID }}/docker-images/eq-questionnaire-runner:$TAG .
+
+      - name: Authenticate Docker with GAR
+        run: |
+          gcloud auth configure-docker ${{ secrets.GAR_LOCATION }}
+
+      - name: Push to Google Artifact Registry
+        run: |
+          docker push ${{ secrets.GAR_LOCATION }}/${{ secrets.GAR_PROJECT_ID }}/docker-images/eq-questionnaire-runner:$TAG
